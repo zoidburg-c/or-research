@@ -1,0 +1,12 @@
+env: healthcare
+env_params:
+  num_hospitals: 3
+  episode_length: 168
+momas:
+  reward_structure: team
+  utility_type: individual
+  optimisation_criterion: SER
+  num_objectives: 3
+agent_type: tabular_moq
+num_episodes: 50
+seed: 42
