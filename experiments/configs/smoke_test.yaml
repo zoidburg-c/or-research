@@ -1,0 +1,14 @@
+env: trading
+env_params:
+  num_agents: 2
+  agent_types: [market_maker, momentum]
+  episode_length: 20
+momas:
+  reward_structure: team
+  utility_type: team
+  optimisation_criterion: SER
+  num_objectives: 3
+agent_type: tabular_moq
+num_episodes: 3
+seed: 42
+output_dir: results
