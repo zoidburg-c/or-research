@@ -18,6 +18,7 @@ class MOMASConfig:
     optimisation_criterion: Literal["SER", "ESR"]
     num_objectives: int
     utility_functions: dict[str, Callable]
+    welfare_function: Callable | None = None
 
     def __post_init__(self):
         if self.reward_structure == "individual" and self.utility_type == "team":

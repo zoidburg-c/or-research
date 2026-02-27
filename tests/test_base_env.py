@@ -123,3 +123,31 @@ class TestMOMASWrapperIndividualReward:
         obs, rewards, terms, truncs, infos = self.wrapped.step(actions)
         np.testing.assert_array_equal(infos["agent_0"]["vec_reward"], np.array([10.0, 20.0]))
         np.testing.assert_array_equal(infos["agent_1"]["vec_reward"], np.array([30.0, 40.0]))
+
+
+from momas.utility import utilitarian_welfare
+
+class TestMOMASConfigWelfare:
+    def test_config_with_welfare_function(self):
+        cfg = MOMASConfig(
+            reward_structure="team",
+            utility_type="social_choice",
+            optimisation_criterion="SER",
+            num_objectives=2,
+            utility_functions={
+                "agent_0": linear_utility(np.array([0.7, 0.3])),
+                "agent_1": linear_utility(np.array([0.3, 0.7])),
+            },
+            welfare_function=utilitarian_welfare,
+        )
+        assert cfg.welfare_function is utilitarian_welfare
+
+    def test_config_welfare_defaults_to_none(self):
+        cfg = MOMASConfig(
+            reward_structure="team",
+            utility_type="team",
+            optimisation_criterion="SER",
+            num_objectives=2,
+            utility_functions={"shared": linear_utility(np.array([0.5, 0.5]))},
+        )
+        assert cfg.welfare_function is None
