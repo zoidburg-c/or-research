@@ -70,3 +70,73 @@ class TestRunExperiment:
         )
         results = run_experiment(cfg)
         assert "episode_returns" in results
+
+
+class TestPerAgentUtility:
+    def test_individual_utility_uses_different_weights(self, tmp_path):
+        """Individual utility agents should use different utility functions."""
+        cfg = ExperimentConfig(
+            env="healthcare",
+            env_params={"num_hospitals": 2, "episode_length": 10},
+            momas_reward_structure="team",
+            momas_utility_type="individual",
+            momas_criterion="SER",
+            num_objectives=3,
+            agent_type="tabular_moq",
+            num_episodes=3,
+            seed=42,
+            output_dir=str(tmp_path),
+        )
+        r1 = run_experiment(cfg)
+
+        cfg_team = ExperimentConfig(
+            env="healthcare",
+            env_params={"num_hospitals": 2, "episode_length": 10},
+            momas_reward_structure="team",
+            momas_utility_type="team",
+            momas_criterion="SER",
+            num_objectives=3,
+            agent_type="tabular_moq",
+            num_episodes=3,
+            seed=42,
+            output_dir=str(tmp_path / "team"),
+        )
+        r2 = run_experiment(cfg_team)
+
+        # Individual and team utility should produce different results
+        assert not np.allclose(r1["episode_returns"], r2["episode_returns"])
+
+
+class TestSocialChoiceWelfare:
+    def test_social_choice_differs_from_individual(self, tmp_path):
+        """Social choice (welfare-aggregated) should differ from individual utility."""
+        cfg_social = ExperimentConfig(
+            env="healthcare",
+            env_params={"num_hospitals": 2, "episode_length": 10},
+            momas_reward_structure="team",
+            momas_utility_type="social_choice",
+            momas_criterion="SER",
+            num_objectives=3,
+            agent_type="tabular_moq",
+            num_episodes=3,
+            seed=42,
+            output_dir=str(tmp_path / "social"),
+        )
+        r_social = run_experiment(cfg_social)
+
+        cfg_indiv = ExperimentConfig(
+            env="healthcare",
+            env_params={"num_hospitals": 2, "episode_length": 10},
+            momas_reward_structure="team",
+            momas_utility_type="individual",
+            momas_criterion="SER",
+            num_objectives=3,
+            agent_type="tabular_moq",
+            num_episodes=3,
+            seed=42,
+            output_dir=str(tmp_path / "indiv"),
+        )
+        r_indiv = run_experiment(cfg_indiv)
+
+        # Social choice welfare-aggregated training should differ from individual
+        assert not np.allclose(r_social["episode_returns"], r_indiv["episode_returns"])
