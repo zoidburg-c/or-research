@@ -22,15 +22,16 @@ class TestIntegrationSmoke:
         ("individual", "social_choice"),
         ("individual", "individual"),
     ])
+    @pytest.mark.parametrize("criterion", ["SER", "ESR"])
     def test_all_taxonomy_settings(
-        self, env_name, env_params, reward_structure, utility_type, output_dir
+        self, env_name, env_params, reward_structure, utility_type, criterion, output_dir
     ):
         cfg = ExperimentConfig(
             env=env_name,
             env_params=env_params,
             momas_reward_structure=reward_structure,
             momas_utility_type=utility_type,
-            momas_criterion="SER",
+            momas_criterion=criterion,
             num_objectives=3,
             agent_type="tabular_moq",
             num_episodes=2,
