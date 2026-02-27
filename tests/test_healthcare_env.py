@@ -39,3 +39,8 @@ class TestHealthcareEnvAPI:
             actions = {a: env.action_space(a).sample() for a in env.agents}
             env.step(actions)
         assert len(env.agents) == 0
+
+    def test_has_reward_space(self):
+        env = HealthcareEnv(num_hospitals=2)
+        assert hasattr(env, "reward_space")
+        assert env.reward_space.shape == (3,)

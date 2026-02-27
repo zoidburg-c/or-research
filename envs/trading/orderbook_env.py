@@ -57,6 +57,7 @@ class TradingEnv(ParallelEnv):
         self._price_history: list[float] = []
         self._step_count = 0
         self._rng: np.random.Generator | None = None
+        self.reward_space = Box(low=-np.inf, high=np.inf, shape=(num_objectives,), dtype=np.float64)
 
     @functools.lru_cache(maxsize=None)
     def observation_space(self, agent: str) -> Box:

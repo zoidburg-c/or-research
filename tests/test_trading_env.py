@@ -44,3 +44,8 @@ class TestTradingEnvAPI:
     def test_agent_types_length_matches_num_agents(self):
         with pytest.raises(ValueError):
             TradingEnv(num_agents=3, agent_types=["market_maker", "momentum"])
+
+    def test_has_reward_space(self):
+        env = TradingEnv(num_agents=2, agent_types=["market_maker", "momentum"])
+        assert hasattr(env, "reward_space")
+        assert env.reward_space.shape == (3,)
