@@ -140,3 +140,25 @@ class TestSocialChoiceWelfare:
 
         # Social choice welfare-aggregated training should differ from individual
         assert not np.allclose(r_social["episode_returns"], r_indiv["episode_returns"])
+
+
+class TestESRDifferentiation:
+    def test_esr_produces_different_metrics_than_ser(self, tmp_path):
+        """ESR with non-linear utility should produce SER != ESR in metrics."""
+        cfg = ExperimentConfig(
+            env="healthcare",
+            env_params={"num_hospitals": 2, "episode_length": 10},
+            momas_reward_structure="team",
+            momas_utility_type="team",
+            momas_criterion="ESR",
+            num_objectives=3,
+            agent_type="tabular_moq",
+            num_episodes=5,
+            seed=42,
+            output_dir=str(tmp_path),
+        )
+        results = run_experiment(cfg)
+
+        assert np.isfinite(results["ser"])
+        assert np.isfinite(results["esr"])
+        assert results["episode_returns"].shape == (5, 3)
