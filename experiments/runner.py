@@ -11,6 +11,8 @@ from momas.base_env import MOMASConfig, MOMASWrapper
 from momas.utility import linear_utility, threshold_utility, utilitarian_welfare
 from momas.metrics import compute_pareto_front, hypervolume, evaluate_ser, evaluate_esr
 from agents.mo_q_learning import TabularMOQLearning
+from agents.mo_dqn import MODQN
+from agents.envelope_moq import EnvelopeMOQ
 
 
 @dataclass
@@ -117,8 +119,6 @@ def _get_agent_utility(momas_cfg: MOMASConfig, agent: str):
 
 
 def run_experiment(cfg: ExperimentConfig) -> dict[str, Any]:
-    # Derive experiment seed from base seed + utility_type so different
-    # taxonomy settings produce genuinely different exploration trajectories
     setting_hash = hash(cfg.momas_utility_type) % (2**31)
     exp_seed = (cfg.seed + setting_hash) % (2**31)
     rng = np.random.default_rng(exp_seed)
@@ -128,17 +128,51 @@ def run_experiment(cfg: ExperimentConfig) -> dict[str, Any]:
     momas_cfg, agent_weights = _make_momas_config(cfg, base_env.possible_agents)
     env = MOMASWrapper(base_env, momas_cfg)
 
+    is_deep_rl = cfg.agent_type in ("mo_dqn", "envelope")
+
     agents = {}
     for a in env.possible_agents:
-        agents[a] = TabularMOQLearning(
-            num_states=10000,
-            num_actions=env.action_space(a).n,
-            num_objectives=cfg.num_objectives,
-            learning_rate=0.1,
-            gamma=0.99,
-            epsilon=0.3,
-            seed=rng.integers(0, 2**31),
-        )
+        obs_dim = env.observation_space(a).shape[0]
+        n_actions = env.action_space(a).n
+        agent_seed = int(rng.integers(0, 2**31))
+
+        if cfg.agent_type == "mo_dqn":
+            agents[a] = MODQN(
+                obs_dim=obs_dim,
+                num_actions=n_actions,
+                num_objectives=cfg.num_objectives,
+                lr=1e-3,
+                gamma=0.99,
+                epsilon=0.3,
+                buffer_size=10_000,
+                batch_size=64,
+                target_update_freq=100,
+                seed=agent_seed,
+            )
+        elif cfg.agent_type == "envelope":
+            agents[a] = EnvelopeMOQ(
+                obs_dim=obs_dim,
+                num_actions=n_actions,
+                num_objectives=cfg.num_objectives,
+                lr=3e-4,
+                gamma=0.99,
+                epsilon=0.3,
+                buffer_size=10_000,
+                batch_size=64,
+                learning_starts=100,
+                target_update_freq=200,
+                seed=agent_seed,
+            )
+        else:
+            agents[a] = TabularMOQLearning(
+                num_states=10000,
+                num_actions=n_actions,
+                num_objectives=cfg.num_objectives,
+                learning_rate=0.1,
+                gamma=0.99,
+                epsilon=0.3,
+                seed=agent_seed,
+            )
 
     all_episode_returns = []
 
@@ -148,43 +182,51 @@ def run_experiment(cfg: ExperimentConfig) -> dict[str, Any]:
 
         while env.agents:
             actions = {}
+            prev_obs = {}
             states = {}
             for a in env.agents:
-                s = _discretize_obs(obs[a])
-                states[a] = s
+                prev_obs[a] = obs[a]
+                if not is_deep_rl:
+                    s = _discretize_obs(obs[a])
+                    states[a] = s
                 u_fn = _get_agent_utility(momas_cfg, a)
-                actions[a] = agents[a].select_action(s, utility_fn=u_fn)
+                if is_deep_rl:
+                    actions[a] = agents[a].select_action(obs[a], utility_fn=u_fn)
+                else:
+                    actions[a] = agents[a].select_action(states[a], utility_fn=u_fn)
 
             obs, rewards, terms, truncs, infos = env.step(actions)
 
-            for a in states:
+            for a in prev_obs:
                 if a not in infos:
                     continue
                 vec_r = infos[a]["vec_reward"]
                 episode_rewards[a] += vec_r
-                next_s = _discretize_obs(obs[a]) if a in obs else states[a]
 
-                # Shape reward by agent's utility weights for non-team settings
                 shaped_r = _weight_reward(vec_r, agent_weights[a]) if cfg.momas_utility_type != "team" else vec_r
 
                 if cfg.momas_utility_type == "social_choice" and momas_cfg.welfare_function is not None:
-                    # Social choice: compute welfare across all agents, use as scalar signal
                     agent_utilities = []
-                    for other_a in states:
+                    for other_a in prev_obs:
                         if other_a in infos:
                             other_u_fn = _get_agent_utility(momas_cfg, other_a)
                             other_vec_r = infos[other_a]["vec_reward"]
                             agent_utilities.append(other_u_fn(other_vec_r))
                     welfare = momas_cfg.welfare_function(agent_utilities)
-                    # Scale vec_reward by welfare/own_utility ratio to steer Q-values
                     own_utility = _get_agent_utility(momas_cfg, a)(vec_r)
                     if abs(own_utility) > 1e-10:
-                        welfare_scale = welfare / (len(states) * own_utility)
+                        welfare_scale = welfare / (len(prev_obs) * own_utility)
                         shaped_r = shaped_r * welfare_scale
-                    u_fn = _get_agent_utility(momas_cfg, a)
-                    agents[a].update(states[a], actions[a], shaped_r, next_s, utility_fn=u_fn)
+
+                u_fn = _get_agent_utility(momas_cfg, a)
+                done = terms.get(a, False) or truncs.get(a, False)
+
+                if is_deep_rl:
+                    next_o = obs[a] if a in obs else prev_obs[a]
+                    agents[a].update(prev_obs[a], actions[a], shaped_r, next_o,
+                                     done=done, utility_fn=u_fn)
                 else:
-                    u_fn = _get_agent_utility(momas_cfg, a)
+                    next_s = _discretize_obs(obs[a]) if a in obs else states[a]
                     agents[a].update(states[a], actions[a], shaped_r, next_s, utility_fn=u_fn)
 
         mean_return = np.mean(list(episode_rewards.values()), axis=0)
@@ -192,7 +234,6 @@ def run_experiment(cfg: ExperimentConfig) -> dict[str, Any]:
 
     episode_returns = np.array(all_episode_returns)
 
-    # Use shared linear utility for evaluation metrics (comparable across settings)
     eval_weights = np.ones(cfg.num_objectives) / cfg.num_objectives
     eval_u = linear_utility(eval_weights)
     ser = evaluate_ser(episode_returns, eval_u)

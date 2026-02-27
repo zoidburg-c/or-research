@@ -162,3 +162,39 @@ class TestESRDifferentiation:
         assert np.isfinite(results["ser"])
         assert np.isfinite(results["esr"])
         assert results["episode_returns"].shape == (5, 3)
+
+
+class TestDeepRLAgents:
+    def test_mo_dqn_smoke_healthcare(self, tmp_path):
+        cfg = ExperimentConfig(
+            env="healthcare",
+            env_params={"num_hospitals": 2, "episode_length": 5},
+            momas_reward_structure="team",
+            momas_utility_type="team",
+            momas_criterion="SER",
+            num_objectives=3,
+            agent_type="mo_dqn",
+            num_episodes=2,
+            seed=42,
+            output_dir=str(tmp_path),
+        )
+        results = run_experiment(cfg)
+        assert results["episode_returns"].shape == (2, 3)
+        assert np.isfinite(results["hypervolume"])
+
+    def test_envelope_smoke_healthcare(self, tmp_path):
+        cfg = ExperimentConfig(
+            env="healthcare",
+            env_params={"num_hospitals": 2, "episode_length": 5},
+            momas_reward_structure="team",
+            momas_utility_type="team",
+            momas_criterion="SER",
+            num_objectives=3,
+            agent_type="envelope",
+            num_episodes=2,
+            seed=42,
+            output_dir=str(tmp_path),
+        )
+        results = run_experiment(cfg)
+        assert results["episode_returns"].shape == (2, 3)
+        assert np.isfinite(results["hypervolume"])
