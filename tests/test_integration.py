@@ -43,3 +43,26 @@ class TestIntegrationSmoke:
         assert np.isfinite(results["hypervolume"])
         assert np.isfinite(results["ser"])
         assert np.isfinite(results["esr"])
+
+    @pytest.mark.parametrize("env_name,env_params", [
+        ("healthcare", {"num_hospitals": 2, "episode_length": 5}),
+    ])
+    @pytest.mark.parametrize("agent_type", ["mo_dqn", "envelope"])
+    def test_deep_rl_agents(self, env_name, env_params, agent_type, output_dir):
+        cfg = ExperimentConfig(
+            env=env_name,
+            env_params=env_params,
+            momas_reward_structure="team",
+            momas_utility_type="team",
+            momas_criterion="SER",
+            num_objectives=3,
+            agent_type=agent_type,
+            num_episodes=2,
+            seed=42,
+            output_dir=output_dir,
+        )
+        results = run_experiment(cfg)
+        assert results["episode_returns"].shape == (2, 3)
+        assert np.isfinite(results["hypervolume"])
+        assert np.isfinite(results["ser"])
+        assert np.isfinite(results["esr"])
